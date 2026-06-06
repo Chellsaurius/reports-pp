@@ -14,68 +14,119 @@ class ReportController extends Controller
     }
 
     public function sales(Request $request)
-    {
+    {   //validacion de informacion
         $validated = $request->validate([
-            'ventas' => 'required|array',
-            'ventas.*.producto' => 'required|string',
-            'ventas.*.precio' => 'required|numeric',
-            'ventas.*.cantidad' => 'required|integer|min:1'
+            '*.vendedor' => 'required|string',
+            '*.producto' => 'required|string',
+            '*.categoria' => 'required|string',
+            '*.fecha' => 'required|date',
+            '*.cantidad' => 'required|integer|min:1',
+            '*.precioUnitario' => 'required|numeric'
         ]);
 
+        /*
+            DATOS QUE SOLICITAN
+            Vendedor    
+            Producto
+            Categoría
+            Fecha
+            Cant.
+            P. Unitario
+            { "vendedor": "Ana",    "producto": "Laptop",   "categoria": "Electrónica", "fecha": "2025-03-05", "cantidad": 2,  "precioUnitario": 12000 },
+        */
+
+        
         $resultado = [];
+        $resumenVendedores = [];
+        $vendedorEstrella = null;
 
-        $subtotalGeneral = 0;
-        $descuentoGeneral = 0;
-        $ivaGeneral = 0;
-        $totalGeneral = 0;
+        $precioNeto = 0;
+        $descuento = 0;
+        $iva = 0;
+        $subtotal = 0;
+        $total = 0;
 
-        foreach ($validated['ventas'] as $venta) {
+        foreach ($validated as $venta) {
 
-            $subtotal = $venta['precio'] * $venta['cantidad'];
+            $precioNeto = $venta['precioUnitario'] * $venta['cantidad'];
 
-            if ($subtotal <= 10000) {
-                $descuento = $subtotal; 
+            if ($venta['categoria'] == 'Electrónica' and $venta['cantidad'] >= 2) {
+                $descuento = $precioNeto * 0.10; 
             }
-            elseif ($subtotal >= 10000.01 and $subtotal <= 20000) {
-                $descuento = $subtotal * 0.10;
+            elseif ($venta['categoria'] == 'Hogar' and $venta['cantidad'] >= 3) {
+                $descuento = $precioNeto * 0.05;
             }
-            elseif ($subtotal >= 20000.01) {
-                $descuento = $subtotal * 0.20;
+            else {
+                $descuento = 0;
             }
 
-            $base = $subtotal - $descuento;
+            $subtotal = $precioNeto - $descuento;
 
-            $iva = $base * 0.16;
+            $iva = $subtotal * 0.16;
 
-            $total = $base + $iva;
-
-            $subtotalGeneral += $subtotal;
-            $descuentoGeneral += $descuento;
-            $ivaGeneral += $iva;
-            $totalGeneral += $total;
+            $total = $subtotal + $iva;
 
             $resultado[] = [
+                'vendedor' => $venta['vendedor'],
                 'producto' => $venta['producto'],
-                'precio' => $venta['precio'],
+                'categoria' => $venta['categoria'],
+                'fecha' => $venta['fecha'],
                 'cantidad' => $venta['cantidad'],
-                'subtotal' => round($subtotal, 2),
+                'precioUnitario' => $venta['precioUnitario'],
+                'precioNeto' => round($precioNeto, 2),
                 'descuento' => round($descuento, 2),
+                'subtotal' => round($subtotal, 2),
                 'iva' => round($iva, 2),
                 'total' => round($total, 2)
             ];
+            // parte para guardar los resultados de los vendedores
+            $vendedor = $venta['vendedor'];
+
+            if (!isset($resumenVendedores[$vendedor])) {
+
+                $resumenVendedores[$vendedor] = [
+                    'vendedor' => $vendedor,
+                    'ventas' => 0,
+                    'precio_neto' => 0,
+                    'descuento' => 0,
+                    'iva' => 0,
+                    'total' => 0
+                ];
+            }
+
+            $resumenVendedores[$vendedor]['ventas']++;
+            $resumenVendedores[$vendedor]['precio_neto'] += $precioNeto;
+            $resumenVendedores[$vendedor]['descuento'] += $descuento;
+            $resumenVendedores[$vendedor]['iva'] += $iva;
+            $resumenVendedores[$vendedor]['total'] += $total;
+
+            
+
         }
 
+        //a;adir vendedor estrella
+        foreach ($resumenVendedores as $vendedor) {
+            if ($vendedorEstrella === null || $vendedor['total'] > $vendedorEstrella['total']) {
+                $vendedorEstrella = $vendedor;
+            }
+        }
+
+        $vendedorEstrellaData = [
+            'nombre' => $vendedorEstrella['vendedor'],
+            'total_con_descuento' => round($vendedorEstrella['total'], 2),
+            'total_sin_descuento' => round(
+                $vendedorEstrella['precio_neto'] * 1.16,
+                2
+            )
+        ];
+        
         $response = [
-            'ventas' => $resultado,
-            'resumen' => [
-                'subtotal_general' => round($subtotalGeneral, 2),
-                'descuento_general' => round($descuentoGeneral, 2),
-                'iva_general' => round($ivaGeneral, 2),
-                'total_general' => round($totalGeneral, 2)
-            ]
+            //'ventas' => $resultado,
+            'resumen_vendedores' => array_values($resumenVendedores)
+            , 'vendedor_estrella' => $vendedorEstrellaData
         ];
 
-        SalesRequest::create([
+         SalesRequest::create([
             'payload' => $request->all(),
             'result' => $response,
             'ip' => $request->ip()

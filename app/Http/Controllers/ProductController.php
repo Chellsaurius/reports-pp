@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Product;
+use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
 {
@@ -11,49 +12,141 @@ class ProductController extends Controller
     public function index()
     {
         return response()->json(
-            Product::all()
+            Product::where('activo', true)
+                ->get()
         );
     }
 
-    public function show(Product $product)
+    public function show($id)
     {
+        $product = Product::where('activo', true)
+            ->find($id);
+
+        if (!$product) {
+
+            return response()->json([
+                'error' => 'Producto no encontrado'
+            ], 404);
+        }
+
         return response()->json($product);
     }
+
+    private const CATEGORIAS = [
+        'electrónica',
+        'electronica',
+        'hogar',
+        'oficina'
+    ];
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'stock' => 'required|integer|min:0'
+            'nombre' => 'required|string',
+            'categoria' => 'required|string',
+            'precioUnitario' => 'required|numeric|gt:0',
+            'stock' => 'nullable|integer|min:0'
         ]);
+        
+        $categoria = mb_strtolower(
+            $validated['categoria']
+        );
 
-        $product = Product::create($validated);
+        if (!in_array($categoria, self::CATEGORIAS)) {
+            return response()->json([
+                'error' => 'Validación fallida',
+                'detalles' => [
+                    'Categoría no es válida. Valores aceptados: Electrónica, Hogar, Oficina'
+                ]
+            ], 400);
+        }
+
+        //$product = Product::create($validated);
+        $product = Product::create([
+            'name' => $validated['nombre'],
+            'categoria' => ucfirst($categoria),
+            'price' => $validated['precioUnitario'],
+            'stock' => $validated['stock'] ?? 0
+        ]);
 
         return response()->json($product, 201);
     }
 
+
+
+
+
     public function update(Request $request, Product $product)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'stock' => 'required|integer|min:0'
-        ]);
+{
+    $validated = $request->validate([
+        'nombre' => 'sometimes|string',
+        'categoria' => 'sometimes|string',
+        'precioUnitario' => 'sometimes|numeric|gt:0',
+        'stock' => 'sometimes|integer|min:0'
+    ]);
 
-        $product->update($validated);
+    $data = [];
 
-        return response()->json($product);
+    // nombre
+    if (isset($validated['nombre'])) {
+        $data['name'] = $validated['nombre'];
     }
 
-    public function destroy(Product $product)
+    // categoria (solo si viene)
+    if (isset($validated['categoria'])) {
+
+        $categoria = mb_strtolower($validated['categoria']);
+
+        if (!in_array($categoria, self::CATEGORIAS)) {
+            return response()->json([
+                'error' => 'Categoría no válida',
+                'validas' => self::CATEGORIAS
+            ], 400);
+        }
+
+        $data['categoria'] = $categoria;
+    }
+
+    // precio
+    if (isset($validated['precioUnitario'])) {
+        $data['price'] = $validated['precioUnitario'];
+    }
+
+    // stock
+    if (isset($validated['stock'])) {
+        $data['stock'] = $validated['stock'];
+    }
+
+    $product->update($data);
+
+    return response()->json($product->refresh());
+}
+
+
+
+
+
+
+
+
+
+    public function destroy($id)
     {
-        $product->delete();
+        $product = Product::find($id);
+
+        if (!$product || !$product->activo) {
+
+            return response()->json([
+                'error' => 'Producto no encontrado'
+            ], 404);
+        }
+
+        $product->activo = false;
+
+        $product->save();
 
         return response()->json([
-            'message' => 'Producto eliminado'
+            'mensaje' => 'Producto desactivado'
         ]);
     }
 

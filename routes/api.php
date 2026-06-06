@@ -11,4 +11,5 @@ Route::get('/test', function () {
 });
 
 Route::post('/reports/sales', [ReportController::class, 'sales']);
-Route::apiResource('products', ProductController::class);
+// Route::apiResource('products', ProductController::class);
+Route::apiResource('productos', ProductController::class);

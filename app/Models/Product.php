@@ -8,8 +8,13 @@ class Product extends Model
 {
     protected $fillable = [
         'name',
-        'description',
+        'categoria',
         'price',
-        'stock'
+        'stock',
+        'activo'
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean'
     ];
 }
